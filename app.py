@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 import pandas as pd
 import os
+import re
 import io
 import math
 import base64
@@ -15,25 +16,43 @@ from PIL import Image
 #Configuración de la página (pantalla ancha)
 st.set_page_config(page_title="GAC Motor | Análisis univariado", layout="wide")
 
-#Colores de GAC
-ROJO = "#C8102E"   #Color principal
-GRIS = "#8C8C8C"   #Color secundario (lo que no necesita atención)
-NEGRO = "#1A1A1A"  #Color de apoyo
-PLATA = "#D0D0D0"  #Bordes metálicos
+#PALETA (teoría del color): el rojo GAC es el ACENTO y solo marca lo que pide atención;
+#los neutros (carbón y grises) son el contexto. Así el ojo va directo a lo importante.
+ROJO = "#C8102E"        #Acento: lo más importante / alerta
+ROJO_OSCURO = "#8E0B20" #Extremo de la escala de intensidad
+CARBON = "#2F3640"      #Serie principal neutra (texto blanco encima se lee bien)
+GRIS = "#9AA1AB"        #Contexto: lo que no necesita atención
+GRIS_CLARO = "#D5D9DE"  #Contexto muy suave (siempre con etiqueta oscura)
+VERDE = "#2E7D4F"       #Estado: cumple / bien (siempre con texto, nunca color solo)
+TINTA = "#1F2328"       #Texto principal
+TINTA_2 = "#5B6370"     #Texto secundario
+FONDO_APP = "#F4F5F7"   #Fondo de la página
+SUPERFICIE = "#FFFFFF"  #Tarjetas y gráficas
+BORDE = "#E3E6EA"       #Bordes suaves
+
+#Escala de intensidad (un solo tono, de claro a oscuro) para treemap y mapa de calor
+ESCALA_ROJA = ["#FCE8EB", "#F4B3BD", "#E2647A", ROJO, ROJO_OSCURO]
+#Colores con significado propio para los niveles de asesor
+METALES = {"Oro": "#B8901F", "Plata": GRIS, "Bronce": "#A0582C"}
 
 LOGO = "logo_gac.png"
 FONDO = "auto fondo.jpeg"
 DISCO = "disco_freno.png"
 CARBONO = "fibra_carbono.png"
 BRILLO = "brillo_dona.png"
+FUENTE = "Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
 
 pio.templates["gac"] = go.layout.Template(layout=dict(
-    font=dict(color="#2B2B2B", size=13),
+    font=dict(family=FUENTE, color=TINTA, size=13),
     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-    colorway=[ROJO, NEGRO, GRIS, "#E06B7D", "#4D4D4D", "#F2B8C0"],
-    xaxis=dict(gridcolor="rgba(0,0,0,0.08)", linecolor="rgba(0,0,0,0.3)", zeroline=False),
-    yaxis=dict(gridcolor="rgba(0,0,0,0.08)", linecolor="rgba(0,0,0,0.3)", zeroline=False),
-    hoverlabel=dict(bgcolor=NEGRO, font_color="white", bordercolor=ROJO)))
+    colorway=[ROJO, CARBON, GRIS],
+    xaxis=dict(gridcolor="#EDEFF2", linecolor=BORDE, zeroline=False,
+               tickfont=dict(color=TINTA_2), title_font=dict(color=TINTA_2)),
+    yaxis=dict(gridcolor="#EDEFF2", linecolor=BORDE, zeroline=False,
+               tickfont=dict(color=TINTA_2), title_font=dict(color=TINTA_2)),
+    legend=dict(font=dict(color=TINTA_2)),
+    barcornerradius=4,
+    hoverlabel=dict(bgcolor=SUPERFICIE, font=dict(color=TINTA, family=FUENTE), bordercolor=BORDE)))
 pio.templates.default = "plotly_white+gac"
 
 MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -152,6 +171,10 @@ def datos_embudo(df):
     Embudo["Pasa"] = (Embudo["Real"] / Embudo["Real"].shift(1) * 100).round(0)
     return Embudo
 
+#Colores por barra: la(s) categoría(s) a destacar en rojo y el resto en gris (contexto)
+def resaltar(categorias, destacar, base=GRIS):
+    return [ROJO if c in destacar else base for c in categorias]
+
 @st.cache_data
 def imagen_b64(ruta, ancho=None):
     if not os.path.exists(ruta):
@@ -164,77 +187,116 @@ def imagen_b64(ruta, ancho=None):
     imagen.save(buffer, format=formato, quality=88)
     return f"data:image/{formato.lower()};base64," + base64.b64encode(buffer.getvalue()).decode()
 
+#Estilos generales (UX): se conservan los elementos de marca (auto de fondo, fibra de carbono,
+#disco de freno, acabados metálicos) pero en segundo plano, para que los datos sean lo primero
 def aplicar_estilos():
     fondo, carbono = imagen_b64(FONDO, 1600), imagen_b64(CARBONO)
     icono = imagen_b64(DISCO, 64)
     capa_fondo = f", url('{fondo}')" if fondo else ""
     capa_carbono = f", url('{carbono}')" if carbono else ""
-    vineta = f"background: url('{icono}') no-repeat 0 0.2em / 1.05em;" if icono else ""
+    vineta = f"background: url('{icono}') no-repeat 0 0.62em / 1.05em;" if icono else ""
     st.markdown(f"""<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    html, body, .stApp, p, li, label, input, h1, h2, h3 {{ font-family: {FUENTE}; }}
+
+    /* Fondo: el auto GAC se queda, aclarado con el gris de la página para no competir con las tarjetas */
     [data-testid="stAppViewContainer"] {{
-        background: linear-gradient(rgba(240,241,243,0.45), rgba(240,241,243,0.45)){capa_fondo};
+        background: linear-gradient(rgba(244,245,247,0.55), rgba(244,245,247,0.55)){capa_fondo};
         background-size: cover; background-position: right bottom; background-attachment: fixed;
-        background-color: #EEEFF1;
+        background-color: {FONDO_APP};
     }}
     [data-testid="stHeader"] {{ background: transparent; }}
+    .stMain .block-container {{ padding-top: 2.2rem; max-width: 1280px; }}
 
+    /* Barra lateral de fibra de carbono, oscurecida para que el texto claro se lea bien */
     [data-testid="stSidebar"] {{
-        background: radial-gradient(ellipse at 30% 0%, rgba(255,255,255,0.10), rgba(0,0,0,0.35) 80%){capa_carbono};
-        background-color: #1E1E1E;
+        background: linear-gradient(rgba(18,20,24,0.78), rgba(18,20,24,0.88)){capa_carbono};
+        background-color: #16181D;
         border-right: 3px solid {ROJO};
-        border-radius: 0 26px 26px 0;
-        box-shadow: 4px 0 22px rgba(200,16,46,0.45), inset -6px 0 10px rgba(0,0,0,0.5);
+        border-radius: 0 22px 22px 0;
+        box-shadow: 4px 0 16px rgba(200,16,46,0.22);
     }}
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ color: #E4E4E4 !important; }}
-
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ color: #C9CED6 !important; }}
+    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {{
+        color: #FFFFFF !important; font-weight: 600; font-size: 0.82rem;
+        text-transform: uppercase; letter-spacing: 0.06em;
+    }}
+    /* Controles con acabado metálico suave (plata clara, texto oscuro con buen contraste) */
     [data-testid="stSidebar"] :is([data-testid="stSelectbox"], [data-testid="stMultiSelect"]) > div:last-child > div {{
-        background: linear-gradient(180deg, #F7F7F7 0%, #CFCFCF 48%, #B9B9B9 52%, #E2E2E2 100%);
-        border: 1px solid #8A8A8A; border-radius: 6px;
-        box-shadow: inset 0 1px 0 #FFFFFF, 0 2px 6px rgba(0,0,0,0.5);
+        background: linear-gradient(180deg, #FFFFFF 0%, #EEF0F3 55%, #E1E4E8 100%);
+        border: 1px solid #8A9099; border-radius: 8px;
+        box-shadow: inset 0 1px 0 #FFFFFF, 0 2px 6px rgba(0,0,0,0.35);
     }}
-    [data-testid="stSidebar"] :is([data-testid="stSelectbox"], [data-testid="stMultiSelect"]) > div:last-child * {{ color: {NEGRO} !important; }}
-    [data-testid="stSidebar"] [data-testid="stMultiSelectTagsContainer"] [role="group"] > span {{
-        background: linear-gradient(180deg, #E0213F, {ROJO} 55%, #9E0C24) !important;
-        border: 1px solid #7A0A1C;
+    [data-testid="stSidebar"] :is([data-testid="stSelectbox"], [data-testid="stMultiSelect"]) > div:last-child * {{ color: {TINTA} !important; }}
+    [data-testid="stSidebar"] [data-testid="stMultiSelect"] [data-testid="stMultiSelectTagsContainer"] [role="group"] > span {{
+        background: linear-gradient(180deg, #D8213D, {ROJO} 60%, #A80D27) !important;
+        border: 1px solid {ROJO_OSCURO}; border-radius: 6px;
     }}
-    [data-testid="stSidebar"] [data-testid="stMultiSelectTagsContainer"] [role="group"] > span,
-    [data-testid="stSidebar"] [data-testid="stMultiSelectTagsContainer"] [role="group"] > span * {{ color: #FFFFFF !important; }}
+    [data-testid="stSidebar"] [data-testid="stMultiSelect"] [data-testid="stMultiSelectTagsContainer"] [role="group"] > span,
+    [data-testid="stSidebar"] [data-testid="stMultiSelect"] [data-testid="stMultiSelectTagsContainer"] [role="group"] > span * {{ color: #FFFFFF !important; }}
+    [data-testid="stSidebar"] hr {{ border-color: #2A2E35; }}
 
+    /* Título con acabado metálico oscuro (alto contraste) y barra roja de acento */
     .stMain h1 {{
-        font-weight: 800; letter-spacing: 0.5px;
-        background: linear-gradient(180deg, #8A8A8A 0%, #3A3A3A 45%, #1E1E1E 55%, #5A5A5A 100%);
+        font-weight: 800; letter-spacing: -0.02em;
+        background: linear-gradient(180deg, #4A515C 0%, {TINTA} 50%, #3A4049 100%);
         -webkit-background-clip: text; background-clip: text; color: transparent;
-        filter: drop-shadow(0 2px 1px rgba(0,0,0,0.25));
+        border-left: 6px solid {ROJO}; padding-left: 14px;
     }}
-    .stMain h3 {{ color: {NEGRO}; font-weight: 700; }}
-    .stMain hr {{ border-color: rgba(0,0,0,0.12); }}
+    .stMain h3 {{ color: {TINTA}; font-weight: 700; font-size: 1.2rem; }}
+    .stMain [data-testid="stMarkdownContainer"] p {{ color: #3A4049; line-height: 1.6; }}
+    .stMain [data-testid="stCaptionContainer"] p {{ color: {TINTA_2}; }}
+    .stMain hr {{ border-color: rgba(31,35,40,0.12); }}
 
-    .stMain [data-testid="stMarkdownContainer"] ul {{ list-style: none; padding-left: 0; }}
-    .stMain [data-testid="stMarkdownContainer"] li {{ padding-left: 1.6em; margin-bottom: 0.45em; {vineta} }}
-    .puntos-titulo {{ font-weight: 700; color: {NEGRO}; margin-bottom: 0.4em;
+    /* Cada sección es una tarjeta blanca sobre el fondo del auto */
+    .stMain [class*="st-key-seccion_"] {{
+        background: rgba(255,255,255,0.94); backdrop-filter: blur(4px);
+        border: 1px solid {BORDE} !important; border-radius: 14px;
+        box-shadow: 0 1px 2px rgba(16,24,40,0.05), 0 6px 16px rgba(16,24,40,0.07);
+    }}
+
+    /* Puntos clave: el disco de freno como viñeta */
+    .puntos-titulo {{ font-size: 0.75rem; font-weight: 700; color: {ROJO};
+                      text-transform: uppercase; letter-spacing: 0.08em; margin: 0.4em 0 0.6em;
                       border-bottom: 2px solid {ROJO}; display: inline-block; padding-bottom: 2px; }}
-
-    [data-testid="stMetric"] {{
-        background: rgba(255,255,255,0.78); backdrop-filter: blur(4px);
-        border-left: 4px solid {ROJO}; border-radius: 10px; padding: 12px 18px;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+    .stMain [data-testid="stMarkdownContainer"] ul {{ list-style: none; padding-left: 0; }}
+    .stMain [data-testid="stMarkdownContainer"] li {{
+        padding: 0.55em 0 0.55em 1.6em; margin: 0; {vineta}
+        border-bottom: 1px solid #F0F2F4; color: #3A4049; line-height: 1.5;
     }}
+    .stMain [data-testid="stMarkdownContainer"] li:last-child {{ border-bottom: none; }}
+    .stMain [data-testid="stMarkdownContainer"] strong {{ color: {TINTA}; }}
+
+    /* Tarjetas de indicadores (semitransparentes sobre el fondo) */
+    [data-testid="stMetric"] {{
+        background: rgba(255,255,255,0.88); backdrop-filter: blur(4px);
+        border: 1px solid {BORDE}; border-top: 3px solid {ROJO};
+        border-radius: 12px; padding: 14px 18px;
+        box-shadow: 0 3px 10px rgba(16,24,40,0.10);
+    }}
+    [data-testid="stMetricLabel"] p {{ color: {TINTA_2} !important; font-weight: 600; }}
+    [data-testid="stMetricValue"] {{ color: {TINTA}; font-weight: 700; }}
     </style>""", unsafe_allow_html=True)
 
+#Donas: se conservan el brillo metálico, el disco de freno al centro y las etiquetas con flecha;
+#las etiquetas ahora son blancas con borde del color de la rebanada y texto oscuro (se leen siempre)
 def decorar_dona(fig):
     traza = fig.data[0]
     etiquetas, valores = list(traza.labels), list(traza.values)
-    colores = list(traza.marker.colors or fig.layout.piecolorway or [ROJO, NEGRO, GRIS])
+    colores = list(traza.marker.colors or [ROJO, CARBON, GRIS])
     total = max(sum(valores), 1)
     fig.update_layout(height=400, margin=dict(t=50, b=50, l=20, r=20))
     radio = 150
+    #Texto dentro de la rebanada: blanco sobre colores oscuros, oscuro sobre grises claros
+    texto = ["white" if c in (ROJO, CARBON, ROJO_OSCURO) else TINTA for c in colores]
     fig.update_traces(sort=False, direction="clockwise", rotation=0, textinfo="label+percent",
-                      textfont=dict(size=14, color="white"),
-                      marker=dict(colors=colores, line=dict(color="#2A2A2A", width=2)))
+                      textposition="inside", textfont=dict(size=14, color=texto),
+                      marker=dict(colors=colores, line=dict(color=SUPERFICIE, width=2)))
     if os.path.exists(BRILLO):
         fig.add_layout_image(source=Image.open(BRILLO), xref="paper", yref="paper", x=0.5, y=0.5,
-                             sizex=1, sizey=1, xanchor="center", yanchor="middle", layer="above")
+                             sizex=1, sizey=1, xanchor="center", yanchor="middle", layer="above",
+                             opacity=0.6)
     if os.path.exists(DISCO):
         fig.add_layout_image(source=Image.open(DISCO), xref="paper", yref="paper", x=0.5, y=0.5,
                              sizex=0.5, sizey=0.5, xanchor="center", yanchor="middle", layer="above")
@@ -247,27 +309,27 @@ def decorar_dona(fig):
                            xshift=radio * 0.92 * math.cos(angulo), yshift=radio * 0.92 * math.sin(angulo),
                            ax=95 * math.cos(angulo), ay=-45 * math.sin(angulo),
                            text=f"{etiqueta} ({valor / total * 100:.1f}%)", showarrow=True,
-                           arrowhead=0, arrowwidth=1.5, arrowcolor="#555555",
-                           bgcolor=color, bordercolor=PLATA, borderwidth=2, borderpad=6,
-                           font=dict(color="white", size=13))
+                           arrowhead=0, arrowwidth=1.5, arrowcolor=TINTA_2,
+                           bgcolor=SUPERFICIE, bordercolor=color, borderwidth=2, borderpad=6,
+                           font=dict(color=TINTA, size=13))
     return fig
 
 #Muestra una sección: pregunta arriba, gráfica a la izquierda y puntos clave a la derecha
 def seccion(pregunta, figura, puntos):
-    st.subheader(pregunta)
-    Contenedor_Graf, Contenedor_Texto = st.columns([2, 1], gap="large")
-    with Contenedor_Graf:
-        figura.update_layout(height=400, margin=dict(t=20, b=20), title=None,
-                             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
-        figura.update_traces(marker_line_color="#7A0A1C", marker_line_width=1,
-                             selector=lambda t: t.type in ("bar", "funnel"))
-        if figura.data and figura.data[0].type == "pie":
-            decorar_dona(figura)
-        st.plotly_chart(figura, width="stretch", key=pregunta, theme=None)
-    with Contenedor_Texto:
-        st.markdown('<div class="puntos-titulo">Puntos clave</div>', unsafe_allow_html=True)
-        st.markdown("\n".join(f"- {p}" for p in puntos))
-    st.divider()
+    with st.container(border=True, key="seccion_" + re.sub(r"\W", "_", pregunta)):
+        st.subheader(pregunta)
+        Contenedor_Graf, Contenedor_Texto = st.columns([2, 1], gap="large")
+        with Contenedor_Graf:
+            figura.update_layout(height=400, margin=dict(t=20, b=20), title=None,
+                                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+            #Números junto a las barras en texto oscuro, nunca del color de la barra
+            figura.update_traces(outsidetextfont_color=TINTA, selector=dict(type="bar"))
+            if figura.data and figura.data[0].type == "pie":
+                decorar_dona(figura)
+            st.plotly_chart(figura, width="stretch", key=pregunta, theme=None)
+        with Contenedor_Texto:
+            st.markdown('<div class="puntos-titulo">Puntos clave</div>', unsafe_allow_html=True)
+            st.markdown("\n".join(f"- {p}" for p in puntos))
 
 #Suma (o valor) de la variable en cada mes, ordenado en el tiempo
 def serie_mensual(df, columna, medida):
@@ -284,9 +346,9 @@ def serie_mensual(df, columna, medida):
 #BARRAS HORIZONTALES: las 10 categorías más grandes
 def g_barras(df, Datos, nombre, columna, medida, variable):
     d = Datos.head(10)
-    fig = px.bar(d.iloc[::-1], x=nombre, y="Categoría", orientation="h", text="Porcentaje",
-                 color_discrete_sequence=[ROJO])
-    fig.update_traces(texttemplate="%{text}%", textposition="outside", cliponaxis=False)
+    fig = px.bar(d.iloc[::-1], x=nombre, y="Categoría", orientation="h", text="Porcentaje")
+    fig.update_traces(texttemplate="%{text}%", textposition="outside", cliponaxis=False,
+                      marker_color=resaltar(d["Categoría"].iloc[::-1], [Datos["Categoría"].iloc[0]]))
     fig.update_yaxes(type="category", title="")
     fig.update_xaxes(range=[0, d[nombre].max() * 1.2])
     top3 = Datos["Porcentaje"].head(3).sum()
@@ -298,11 +360,13 @@ def g_barras(df, Datos, nombre, columna, medida, variable):
 #LOLLIPOP (paleta): como barras pero más limpio para nombres de personas
 def g_lollipop(df, Datos, nombre, columna, medida, variable):
     d = Datos.head(10).iloc[::-1]
-    fig = px.scatter(d, x=nombre, y="Categoría", text=nombre, color_discrete_sequence=[ROJO])
-    for _, fila in d.iterrows():
+    colores = resaltar(d["Categoría"], [Datos["Categoría"].iloc[0]])
+    fig = px.scatter(d, x=nombre, y="Categoría", text=nombre)
+    for (_, fila), color in zip(d.iterrows(), colores):
         fig.add_shape(type="line", x0=0, x1=fila[nombre], y0=fila["Categoría"], y1=fila["Categoría"],
-                      line=dict(color=ROJO, width=3))
-    fig.update_traces(marker_size=16, textposition="middle right")
+                      line=dict(color=color, width=3), layer="below")
+    fig.update_traces(marker=dict(size=16, color=colores, line=dict(color=SUPERFICIE, width=2)),
+                      textposition="middle right", textfont_color=TINTA)
     fig.update_yaxes(type="category", title="")
     fig.update_xaxes(range=[0, d[nombre].max() * 1.2])
     lider, segundo = Datos.iloc[0], Datos.iloc[1]
@@ -323,8 +387,9 @@ def g_lollipop(df, Datos, nombre, columna, medida, variable):
 def g_treemap(df, Datos, nombre, columna, medida, variable):
     d = Datos.head(15)
     fig = px.treemap(d, path=[px.Constant("Total"), "Categoría"], values=nombre,
-                     color=nombre, color_continuous_scale="Reds")
-    fig.update_traces(texttemplate="%{label}<br>%{value}", root_color="white")
+                     color=nombre, color_continuous_scale=ESCALA_ROJA)
+    fig.update_traces(texttemplate="%{label}<br>%{value}", root_color=FONDO_APP,
+                      marker_line=dict(color=SUPERFICIE, width=2))
     fig.update_layout(coloraxis_showscale=False)
     return fig, "¿Cuánto aporta cada uno?", [
         f"El cuadro más grande es **{Datos['Categoría'].iloc[0]}**: **{Datos['Porcentaje'].iloc[0]}%** del total.",
@@ -337,7 +402,7 @@ def g_dona(df, Datos, nombre, columna, medida, variable):
     if variable == "Bono de marketing":
         Datos["Categoría"] = Datos["Categoría"].replace({"0": "Sin bono", "50000": "Con bono de $50,000"})
     fig = px.pie(Datos, names="Categoría", values=nombre, hole=0.5,
-                 color_discrete_sequence=[ROJO, "#1A1A1A", GRIS, "#E06B7D", "#4D4D4D", "#F2B8C0"])
+                 color_discrete_sequence=[ROJO, CARBON, GRIS])
     fig.update_traces(textinfo="label+percent", textfont_size=14, sort=False)
     fig.update_layout(showlegend=False)
     p = Datos.sort_values(nombre, ascending=False)
@@ -374,9 +439,13 @@ def g_barra100(df, Datos, nombre, columna, medida, variable):
     d = Datos.copy()
     d["Total"] = "Ventas"
     fig = px.bar(d, x="Porcentaje", y="Total", color="Categoría", orientation="h", text="Categoría",
-                 color_discrete_sequence=[ROJO, "#1A1A1A", GRIS])
+                 color_discrete_sequence=[ROJO, CARBON, GRIS_CLARO])
     fig.update_traces(texttemplate="%{text}<br>%{x:.0f}%", textposition="inside",
-                      insidetextanchor="middle", textfont_size=16)
+                      insidetextanchor="middle", textfont_size=16,
+                      marker_line=dict(color=SUPERFICIE, width=2))
+    #Texto blanco sobre colores oscuros y oscuro sobre el gris claro (contraste legible)
+    for traza in fig.data:
+        traza.insidetextfont = dict(color=TINTA if traza.marker.color == GRIS_CLARO else "white")
     fig.update_layout(showlegend=False, barmode="stack")
     fig.update_yaxes(visible=False)
     fig.update_xaxes(title="% de las ventas", range=[0, 100])
@@ -387,7 +456,7 @@ def g_barra100(df, Datos, nombre, columna, medida, variable):
 
 #HISTOGRAMA: cuántas personas venden poco, regular o mucho
 def g_histograma(df, Datos, nombre, columna, medida, variable):
-    fig = px.histogram(Datos, x=nombre, nbins=10, color_discrete_sequence=[ROJO])
+    fig = px.histogram(Datos, x=nombre, nbins=10, color_discrete_sequence=[CARBON])
     fig.update_traces(marker_line_color="white", marker_line_width=2)
     fig.update_xaxes(title="Ventas totales por vendedor")
     fig.update_yaxes(title="Número de vendedores")
@@ -400,8 +469,10 @@ def g_histograma(df, Datos, nombre, columna, medida, variable):
 
 #BARRAS VERTICALES: valores numéricos en orden 0, 1, 2...
 def g_barras_v(df, Datos, nombre, columna, medida, variable):
-    fig = px.bar(Datos, x="Categoría", y=nombre, text="Porcentaje", color_discrete_sequence=[ROJO])
-    fig.update_traces(texttemplate="%{text}%", textposition="outside", cliponaxis=False)
+    moda = Datos.sort_values(nombre, ascending=False)["Categoría"].iloc[0]
+    fig = px.bar(Datos, x="Categoría", y=nombre, text="Porcentaje")
+    fig.update_traces(texttemplate="%{text}%", textposition="outside", cliponaxis=False,
+                      marker_color=resaltar(Datos["Categoría"], [moda]))
     fig.update_xaxes(type="category", title=variable)
     fig.update_yaxes(range=[0, Datos[nombre].max() * 1.2])
     p = Datos.sort_values(nombre, ascending=False).iloc[0]
@@ -414,7 +485,7 @@ def g_vendio(df, Datos, nombre, columna, medida, variable):
     d = df[columna].apply(lambda v: "Vendió" if v > 0 else "No vendió").value_counts().reset_index()
     d.columns = ["Resultado", "Registros"]
     fig = px.pie(d, names="Resultado", values="Registros", hole=0.5, color="Resultado",
-                 color_discrete_map={"Vendió": ROJO, "No vendió": GRIS})
+                 color_discrete_map={"Vendió": CARBON, "No vendió": ROJO})
     fig.update_traces(textinfo="label+percent", textfont_size=15)
     fig.update_layout(showlegend=False)
     sin = (df[columna] <= 0).mean() * 100
@@ -426,8 +497,9 @@ def g_vendio(df, Datos, nombre, columna, medida, variable):
 def g_gauge_venta(df, Datos, nombre, columna, medida, variable):
     pct = (df[columna] > 0).mean() * 100
     fig = go.Figure(go.Indicator(mode="gauge+number", value=pct, number={"suffix": "%"},
-                                 gauge={"axis": {"range": [0, 100]}, "bar": {"color": ROJO},
-                                        "steps": [{"range": [0, 100], "color": "#F2F2F2"}]}))
+                                 gauge={"axis": {"range": [0, 100]}, "bar": {"color": ROJO}, "bgcolor": "#EEF0F3",
+                                        "borderwidth": 0}))
+    fig.update_traces(number_font=dict(color=TINTA, size=56))
     return fig, "¿Qué tan seguido vende un vendedor?", [
         f"Un vendedor cierra al menos una venta en **{pct:.0f}%** de sus meses.",
         f"En **{100 - pct:.0f}%** de los meses no vende nada.",
@@ -437,17 +509,20 @@ def g_gauge_venta(df, Datos, nombre, columna, medida, variable):
 def g_gauge_clima(df, Datos, nombre, columna, medida, variable):
     prom = df[columna].mean()
     fig = go.Figure(go.Indicator(mode="gauge+number", value=prom, number={"valueformat": ".2f"},
-                                 gauge={"axis": {"range": [0, 5]}, "bar": {"color": ROJO},
-                                        "steps": [{"range": [0, 3], "color": "#F2F2F2"},
-                                                  {"range": [3, 4], "color": "#E5E5E5"},
-                                                  {"range": [4, 5], "color": "#D9D9D9"}]}))
+                                 gauge={"axis": {"range": [0, 5]}, "bar": {"color": CARBON},
+                                        "borderwidth": 0,
+                                        #Zonas de lectura: bajo (rojo suave), medio, bueno (verde suave)
+                                        "steps": [{"range": [0, 3], "color": "#F8D7DC"},
+                                                  {"range": [3, 4], "color": "#EEF0F3"},
+                                                  {"range": [4, 5], "color": "#D5EBDD"}]}))
+    fig.update_traces(number_font=dict(color=TINTA, size=56))
     return fig, "¿Cómo está el clima laboral?", [
         f"El promedio es **{prom:.2f} de 5**: el equipo califica bien su ambiente de trabajo.",
         f"La calificación más baja fue **{df[columna].min()}** y la más alta **{df[columna].max()}**."]
 
 #BOXPLOT: rango de un mes normal
 def g_box(df, Datos, nombre, columna, medida, variable):
-    fig = px.box(df, x=columna, points="all", hover_data=["Año", "Mes"], color_discrete_sequence=[ROJO])
+    fig = px.box(df, x=columna, points="all", hover_data=["Año", "Mes"], color_discrete_sequence=[CARBON])
     fig.update_xaxes(title=variable)
     q1, med, q3 = df[columna].quantile([0.25, 0.5, 0.75])
     peor = df.loc[df[columna].idxmax()]
@@ -459,7 +534,7 @@ def g_box(df, Datos, nombre, columna, medida, variable):
 #VIOLÍN: forma de la distribución
 def g_violin(df, Datos, nombre, columna, medida, variable):
     fig = px.violin(df, x=columna, box=True, points="all", hover_data=["Año", "Mes"],
-                    color_discrete_sequence=[ROJO])
+                    color_discrete_sequence=[CARBON])
     fig.update_xaxes(title=variable)
     med = df[columna].median()
     return fig, "¿Dónde se concentran los meses?", [
@@ -470,10 +545,13 @@ def g_violin(df, Datos, nombre, columna, medida, variable):
 #LÍNEA MES A MES
 def g_linea(df, Datos, nombre, columna, medida, variable):
     s = serie_mensual(df, columna, medida)
-    fig = px.line(s, x="Mes del año", y="Valor", markers=True, color_discrete_sequence=[ROJO],
+    fig = px.line(s, x="Mes del año", y="Valor", markers=True, color_discrete_sequence=[CARBON],
                   labels={"Valor": variable})
     fig.update_xaxes(type="category", title="")
     alto, bajo = s.loc[s["Valor"].idxmax()], s.loc[s["Valor"].idxmin()]
+    #El punto más alto se marca en rojo (es el primer punto clave)
+    fig.update_traces(line_width=2, marker=dict(size=9, line=dict(color=SUPERFICIE, width=2),
+                      color=resaltar(s["Mes del año"], [alto["Mes del año"]], base=CARBON)))
     return fig, "¿Cómo se movió mes a mes?", [
         f"El punto más alto fue **{alto['Mes del año']}** con **{como_texto(float(alto['Valor']))}**.",
         f"El más bajo fue **{bajo['Mes del año']}** con **{como_texto(float(bajo['Valor']))}**.",
@@ -486,7 +564,7 @@ def g_bono_mes(df, Datos, nombre, columna, medida, variable):
     s["Bono"] = s["Valor"].apply(lambda v: "Con bono" if v > 0 else "Sin bono")
     s["Altura"] = 1
     fig = px.bar(s, x="Mes del año", y="Altura", color="Bono",
-                 color_discrete_map={"Con bono": ROJO, "Sin bono": "#E5E5E5"})
+                 color_discrete_map={"Con bono": ROJO, "Sin bono": GRIS_CLARO})
     fig.update_xaxes(type="category", title="")
     fig.update_yaxes(visible=False)
     fig.update_layout(legend_title="", legend=dict(orientation="h", y=-0.3, x=0), bargap=0.1)
@@ -542,7 +620,7 @@ if View == "Hallazgos principales":
     #HALLAZGO 1: ventas por canal principal
     Canales, _ = frecuencias(bases["Principales_Canales"], "Canal", "Ventas", "Categórica")
     figure1 = px.pie(Canales, names="Categoría", values="Ventas", hole=0.5,
-                     color_discrete_sequence=[ROJO, "#1A1A1A", GRIS])
+                     color_discrete_sequence=[ROJO, CARBON, GRIS])
     figure1.update_traces(textinfo="label+percent", textfont_size=15, sort=False)
     figure1.update_layout(showlegend=False)
     seccion("1. ¿Por dónde llegan las ventas?", figure1, [
@@ -553,12 +631,13 @@ if View == "Hallazgos principales":
 
     #HALLAZGO 2: embudo de venta
     Embudo = datos_embudo(preparar(bases["Funnel"], "Indicador del embudo"))
-    figure2 = px.funnel(Embudo, x="Real", y="Indicador", color_discrete_sequence=[ROJO])
-    figure2.update_traces(textinfo="value")
-    figure2.update_yaxes(title="")
     citas = Embudo["Real"].iloc[0]
     ventas = Embudo.loc[Embudo["Indicador"] == "Ventas", "Real"].iloc[0]
     fuga = Embudo.iloc[1:].sort_values("Pasa").iloc[0]
+    figure2 = px.funnel(Embudo, x="Real", y="Indicador")
+    figure2.update_traces(textinfo="value", textfont_color="white",
+                          marker_color=resaltar(Embudo["Indicador"], [fuga["Indicador"]], base=CARBON))
+    figure2.update_yaxes(title="")
     seccion("2. ¿Cuántos clientes llegan hasta la venta?", figure2, [
         f"De **{citas:,}** citas se cierran **{ventas:,}** ventas.",
         f"**{ventas / citas * 100:.0f} de cada 100** citas terminan en venta.",
@@ -567,9 +646,9 @@ if View == "Hallazgos principales":
     #HALLAZGO 3: campañas que traen más leads
     Campanas, _ = frecuencias(bases["MKT_Digital"], "Campaña", "Leads", "Categórica")
     Top5 = Campanas.head(5)
-    figure3 = px.bar(Top5.iloc[::-1], x="Leads", y="Categoría", orientation="h",
-                     text="Leads", color_discrete_sequence=[ROJO])
-    figure3.update_traces(textposition="outside", cliponaxis=False)
+    figure3 = px.bar(Top5.iloc[::-1], x="Leads", y="Categoría", orientation="h", text="Leads")
+    figure3.update_traces(textposition="outside", cliponaxis=False,
+                          marker_color=resaltar(Top5["Categoría"].iloc[::-1], [Top5["Categoría"].iloc[0]]))
     figure3.update_yaxes(title="")
     figure3.update_xaxes(range=[0, Top5["Leads"].max() * 1.2])
     seccion("3. ¿Qué campañas digitales traen más leads?", figure3, [
@@ -592,7 +671,7 @@ if View == "Hallazgos principales":
                             bases["TOPS_TDH"]["APVS_Plata"].mean(),
                             bases["TOPS_TDH"]["APVS_Bronce"].mean()]}).round(1)
     figure5 = px.bar(Niveles, x="Nivel", y="Asesores al mes", text="Asesores al mes",
-                     color="Nivel", color_discrete_map={"Oro": ROJO, "Plata": "#1A1A1A", "Bronce": GRIS})
+                     color="Nivel", color_discrete_map=METALES)
     figure5.update_traces(textposition="outside", cliponaxis=False)
     figure5.update_layout(showlegend=False)
     figure5.update_yaxes(range=[0, Niveles["Asesores al mes"].max() * 1.25])
@@ -607,6 +686,8 @@ if View == "Hallazgos principales":
 ###############################################################################
 # FILTROS DE LAS VISTAS 2 Y 3 (en la barra lateral)
 else:
+    #Separamos visualmente la vista de los filtros
+    st.sidebar.divider()
     #Widget 2: Selectbox de base de datos
     Base = st.sidebar.selectbox(label="Base de datos",
                                 options=sorted({b for b, _, _, _ in VARIABLES.values()}))
@@ -650,8 +731,9 @@ else:
             ventas = Embudo.loc[Embudo["Indicador"] == "Ventas", "Real"].iloc[0]
 
             #GRAPH 1: EMBUDO (FUNNEL)
-            figure1 = px.funnel(Embudo, x="Real", y="Indicador", color_discrete_sequence=[ROJO])
-            figure1.update_traces(textinfo="value+percent previous")
+            figure1 = px.funnel(Embudo, x="Real", y="Indicador")
+            figure1.update_traces(textinfo="value+percent previous", textfont_color="white",
+                                  marker_color=resaltar(Embudo["Indicador"], [fuga["Indicador"]], base=CARBON))
             figure1.update_yaxes(title="")
             seccion("¿Cuántos clientes llegan a cada paso?", figure1, [
                 f"De **{citas:,}** citas se cierran **{ventas:,}** ventas "
@@ -665,9 +747,11 @@ else:
                 lambda c: "Cumple la meta" if c >= 100 else "No cumple la meta")
             figure2 = px.bar(Embudo.iloc[::-1], x="Cumplimiento", y="Indicador", orientation="h",
                              text="Cumplimiento", color="Estado",
-                             color_discrete_map={"Cumple la meta": GRIS, "No cumple la meta": ROJO})
+                             color_discrete_map={"Cumple la meta": VERDE, "No cumple la meta": ROJO})
             figure2.update_traces(texttemplate="%{text:.0f}%", textposition="outside", cliponaxis=False)
-            figure2.add_vline(x=100, line_dash="dash", line_color="black")  #Meta = 100%
+            figure2.add_vline(x=100, line_dash="dash", line_color=TINTA, line_width=1.5,  #Meta = 100%
+                              annotation_text="Meta", annotation_position="top",
+                              annotation_font_color=TINTA)
             figure2.update_yaxes(title="")
             figure2.update_xaxes(title="Cumplimiento (%)",
                                  range=[0, max(Embudo["Cumplimiento"].max(), 100) * 1.2])
@@ -767,9 +851,11 @@ else:
         Categoria_sel = st.selectbox("Elige una categoría", options=top8)
         Serie = (datos[datos["Categoría"] == Categoria_sel]
                  .groupby("Periodo")["Valor"].sum().reset_index())
-        figure3 = px.bar(Serie, x="Periodo", y="Valor", text="Valor",
-                         color_discrete_sequence=[ROJO], labels={"Valor": etiqueta})
-        figure3.update_traces(texttemplate="%{text:" + fmt + "}", textposition="outside", cliponaxis=False)
+        figure3 = px.bar(Serie, x="Periodo", y="Valor", text="Valor", labels={"Valor": etiqueta})
+        #El periodo más alto en rojo; el resto en carbón
+        pico = Serie.loc[Serie["Valor"].idxmax(), "Periodo"]
+        figure3.update_traces(texttemplate="%{text:" + fmt + "}", textposition="outside", cliponaxis=False,
+                              marker_color=resaltar(Serie["Periodo"], [pico], base=CARBON))
         figure3.update_xaxes(type="category")
         figure3.update_yaxes(range=[0, max(Serie["Valor"].max(), 1) * 1.2])
         puntos = []
@@ -788,7 +874,7 @@ else:
         Heat = datos.pivot_table(index="Categoría", columns="Periodo", values="Valor",
                                  aggfunc="sum", fill_value=0)
         Heat = Heat.reindex(top8, fill_value=0)
-        figure4 = px.imshow(Heat, text_auto=fmt.replace(",", ""), aspect="auto", color_continuous_scale="Reds",
+        figure4 = px.imshow(Heat, text_auto=fmt.replace(",", ""), aspect="auto", color_continuous_scale=ESCALA_ROJA,
                             labels={"color": etiqueta, "x": "Periodo", "y": ""})
         figure4.update_xaxes(type="category")
         mejor = Heat.stack().idxmax()
