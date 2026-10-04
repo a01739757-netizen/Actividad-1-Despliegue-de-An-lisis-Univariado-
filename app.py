@@ -43,16 +43,16 @@ BRILLO = "brillo_dona.png"
 FUENTE = "Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
 
 pio.templates["gac"] = go.layout.Template(layout=dict(
-    font=dict(family=FUENTE, color=TINTA, size=13),
+    font=dict(family=FUENTE, color=TINTA, size=16),
     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
     colorway=[ROJO, CARBON, GRIS],
     xaxis=dict(gridcolor="#EDEFF2", linecolor=BORDE, zeroline=False,
-               tickfont=dict(color=TINTA_2), title_font=dict(color=TINTA_2)),
+               tickfont=dict(color=TINTA_2, size=15), title_font=dict(color=TINTA_2, size=16)),
     yaxis=dict(gridcolor="#EDEFF2", linecolor=BORDE, zeroline=False,
-               tickfont=dict(color=TINTA_2), title_font=dict(color=TINTA_2)),
-    legend=dict(font=dict(color=TINTA_2)),
+               tickfont=dict(color=TINTA_2, size=15), title_font=dict(color=TINTA_2, size=16)),
+    legend=dict(font=dict(color=TINTA_2, size=15)),
     barcornerradius=4,
-    hoverlabel=dict(bgcolor=SUPERFICIE, font=dict(color=TINTA, family=FUENTE), bordercolor=BORDE)))
+    hoverlabel=dict(bgcolor=SUPERFICIE, font=dict(color=TINTA, family=FUENTE, size=15), bordercolor=BORDE)))
 pio.templates.default = "plotly_white+gac"
 
 MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -198,10 +198,15 @@ def aplicar_estilos():
     st.markdown(f"""<style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     html, body, .stApp, p, li, label, input, h1, h2, h3 {{ font-family: {FUENTE}; }}
+    /* Letra base más grande: todo lo que Streamlit mide en rem crece con ella */
+    html {{ font-size: 18px; }}
+    .stApp p, .stApp li {{ font-size: 1.05rem; }}
 
-    /* Fondo: el auto GAC se queda, aclarado con el gris de la página para no competir con las tarjetas */
+    /* Fondo: el auto GAC visible. Velo claro más denso a la izquierda (donde va el texto)
+       y más ligero a la derecha (donde está el auto) */
     [data-testid="stAppViewContainer"] {{
-        background: linear-gradient(rgba(244,245,247,0.55), rgba(244,245,247,0.55)){capa_fondo};
+        background: linear-gradient(90deg, rgba(244,245,247,0.45) 0%, rgba(244,245,247,0.15) 55%,
+                                    rgba(244,245,247,0) 100%){capa_fondo};
         background-size: cover; background-position: right bottom; background-attachment: fixed;
         background-color: {FONDO_APP};
     }}
@@ -217,9 +222,10 @@ def aplicar_estilos():
         box-shadow: 4px 0 16px rgba(200,16,46,0.22);
     }}
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ color: #C9CED6 !important; }}
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{ color: #E1E4E8 !important; }}
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {{ font-size: 0.95rem; }}
     [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {{
-        color: #FFFFFF !important; font-weight: 600; font-size: 0.82rem;
+        color: #FFFFFF !important; font-weight: 700; font-size: 0.95rem;
         text-transform: uppercase; letter-spacing: 0.06em;
     }}
     /* Controles con acabado metálico suave (plata clara, texto oscuro con buen contraste) */
@@ -239,44 +245,49 @@ def aplicar_estilos():
 
     /* Título con acabado metálico oscuro (alto contraste) y barra roja de acento */
     .stMain h1 {{
-        font-weight: 800; letter-spacing: -0.02em;
-        background: linear-gradient(180deg, #4A515C 0%, {TINTA} 50%, #3A4049 100%);
-        -webkit-background-clip: text; background-clip: text; color: transparent;
+        font-weight: 800; letter-spacing: -0.02em; font-size: 2.5rem; color: {TINTA};
+        text-shadow: 0 0 12px rgba(255,255,255,0.95), 0 0 4px rgba(255,255,255,0.95);
         border-left: 6px solid {ROJO}; padding-left: 14px;
     }}
-    .stMain h3 {{ color: {TINTA}; font-weight: 700; font-size: 1.2rem; }}
-    .stMain [data-testid="stMarkdownContainer"] p {{ color: #3A4049; line-height: 1.6; }}
-    .stMain [data-testid="stCaptionContainer"] p {{ color: {TINTA_2}; }}
+    .stMain h3 {{ color: {TINTA}; font-weight: 700; font-size: 1.45rem; line-height: 1.3; }}
+    .stMain [data-testid="stMarkdownContainer"] p {{ color: {TINTA}; line-height: 1.6; }}
+    .stMain [data-testid="stCaptionContainer"] p {{ color: #3A4049; font-size: 0.95rem; }}
+    /* Texto suelto sobre el fondo (intro y notas): halo blanco para que el auto no lo tape */
+    .stMain [data-testid="stMarkdownContainer"] p, .stMain [data-testid="stCaptionContainer"] p {{
+        text-shadow: 0 0 6px rgba(255,255,255,0.9), 0 0 2px rgba(255,255,255,0.9);
+    }}
     .stMain hr {{ border-color: rgba(31,35,40,0.12); }}
 
     /* Cada sección es una tarjeta blanca sobre el fondo del auto */
     .stMain [class*="st-key-seccion_"] {{
-        background: rgba(255,255,255,0.94); backdrop-filter: blur(4px);
+        background: rgba(255,255,255,0.80); backdrop-filter: blur(3px);
+        -webkit-backdrop-filter: blur(3px);
         border: 1px solid {BORDE} !important; border-radius: 14px;
         box-shadow: 0 1px 2px rgba(16,24,40,0.05), 0 6px 16px rgba(16,24,40,0.07);
     }}
 
     /* Puntos clave: el disco de freno como viñeta */
-    .puntos-titulo {{ font-size: 0.75rem; font-weight: 700; color: {ROJO};
+    .puntos-titulo {{ font-size: 0.95rem; font-weight: 700; color: {ROJO};
                       text-transform: uppercase; letter-spacing: 0.08em; margin: 0.4em 0 0.6em;
                       border-bottom: 2px solid {ROJO}; display: inline-block; padding-bottom: 2px; }}
     .stMain [data-testid="stMarkdownContainer"] ul {{ list-style: none; padding-left: 0; }}
     .stMain [data-testid="stMarkdownContainer"] li {{
         padding: 0.55em 0 0.55em 1.6em; margin: 0; {vineta}
-        border-bottom: 1px solid #F0F2F4; color: #3A4049; line-height: 1.5;
+        border-bottom: 1px solid #F0F2F4; color: {TINTA}; line-height: 1.55; font-size: 1.05rem;
     }}
     .stMain [data-testid="stMarkdownContainer"] li:last-child {{ border-bottom: none; }}
     .stMain [data-testid="stMarkdownContainer"] strong {{ color: {TINTA}; }}
 
     /* Tarjetas de indicadores (semitransparentes sobre el fondo) */
     [data-testid="stMetric"] {{
-        background: rgba(255,255,255,0.88); backdrop-filter: blur(4px);
+        background: rgba(255,255,255,0.90); backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
         border: 1px solid {BORDE}; border-top: 3px solid {ROJO};
         border-radius: 12px; padding: 14px 18px;
         box-shadow: 0 3px 10px rgba(16,24,40,0.10);
     }}
-    [data-testid="stMetricLabel"] p {{ color: {TINTA_2} !important; font-weight: 600; }}
-    [data-testid="stMetricValue"] {{ color: {TINTA}; font-weight: 700; }}
+    [data-testid="stMetricLabel"] p {{ color: #3A4049 !important; font-weight: 600; font-size: 1rem; }}
+    [data-testid="stMetricValue"] {{ color: {TINTA}; font-weight: 700; font-size: 2.2rem; }}
     </style>""", unsafe_allow_html=True)
 
 #Donas: se conservan el brillo metálico, el disco de freno al centro y las etiquetas con flecha;
@@ -291,7 +302,7 @@ def decorar_dona(fig):
     #Texto dentro de la rebanada: blanco sobre colores oscuros, oscuro sobre grises claros
     texto = ["white" if c in (ROJO, CARBON, ROJO_OSCURO) else TINTA for c in colores]
     fig.update_traces(sort=False, direction="clockwise", rotation=0, textinfo="label+percent",
-                      textposition="inside", textfont=dict(size=14, color=texto),
+                      textposition="inside", textfont=dict(size=16, color=texto),
                       marker=dict(colors=colores, line=dict(color=SUPERFICIE, width=2)))
     if os.path.exists(BRILLO):
         fig.add_layout_image(source=Image.open(BRILLO), xref="paper", yref="paper", x=0.5, y=0.5,
@@ -311,7 +322,7 @@ def decorar_dona(fig):
                            text=f"{etiqueta} ({valor / total * 100:.1f}%)", showarrow=True,
                            arrowhead=0, arrowwidth=1.5, arrowcolor=TINTA_2,
                            bgcolor=SUPERFICIE, bordercolor=color, borderwidth=2, borderpad=6,
-                           font=dict(color=TINTA, size=13))
+                           font=dict(color=TINTA, size=15))
     return fig
 
 #Muestra una sección: pregunta arriba, gráfica a la izquierda y puntos clave a la derecha
@@ -366,7 +377,7 @@ def g_lollipop(df, Datos, nombre, columna, medida, variable):
         fig.add_shape(type="line", x0=0, x1=fila[nombre], y0=fila["Categoría"], y1=fila["Categoría"],
                       line=dict(color=color, width=3), layer="below")
     fig.update_traces(marker=dict(size=16, color=colores, line=dict(color=SUPERFICIE, width=2)),
-                      textposition="middle right", textfont_color=TINTA)
+                      textposition="middle right", textfont=dict(color=TINTA, size=16))
     fig.update_yaxes(type="category", title="")
     fig.update_xaxes(range=[0, d[nombre].max() * 1.2])
     lider, segundo = Datos.iloc[0], Datos.iloc[1]
@@ -403,7 +414,7 @@ def g_dona(df, Datos, nombre, columna, medida, variable):
         Datos["Categoría"] = Datos["Categoría"].replace({"0": "Sin bono", "50000": "Con bono de $50,000"})
     fig = px.pie(Datos, names="Categoría", values=nombre, hole=0.5,
                  color_discrete_sequence=[ROJO, CARBON, GRIS])
-    fig.update_traces(textinfo="label+percent", textfont_size=14, sort=False)
+    fig.update_traces(textinfo="label+percent", textfont_size=16, sort=False)
     fig.update_layout(showlegend=False)
     p = Datos.sort_values(nombre, ascending=False)
     if VARIABLES[variable][2] == "Numérica discreta":
@@ -427,7 +438,7 @@ def g_top5(df, Datos, nombre, columna, medida, variable):
                       "Valor": [Datos[nombre].head(5).sum(), Datos[nombre].iloc[5:].sum()]})
     fig = px.pie(d, names="Grupo", values="Valor", hole=0.5, color="Grupo",
                  color_discrete_map={"Las 5 más grandes": ROJO, resto: GRIS})
-    fig.update_traces(textinfo="label+percent", textfont_size=14)
+    fig.update_traces(textinfo="label+percent", textfont_size=16)
     fig.update_layout(showlegend=False)
     pct5 = Datos["Porcentaje"].head(5).sum()
     return fig, "¿Se concentra en pocas?", [
@@ -441,7 +452,7 @@ def g_barra100(df, Datos, nombre, columna, medida, variable):
     fig = px.bar(d, x="Porcentaje", y="Total", color="Categoría", orientation="h", text="Categoría",
                  color_discrete_sequence=[ROJO, CARBON, GRIS_CLARO])
     fig.update_traces(texttemplate="%{text}<br>%{x:.0f}%", textposition="inside",
-                      insidetextanchor="middle", textfont_size=16,
+                      insidetextanchor="middle", textfont_size=18,
                       marker_line=dict(color=SUPERFICIE, width=2))
     #Texto blanco sobre colores oscuros y oscuro sobre el gris claro (contraste legible)
     for traza in fig.data:
@@ -486,7 +497,7 @@ def g_vendio(df, Datos, nombre, columna, medida, variable):
     d.columns = ["Resultado", "Registros"]
     fig = px.pie(d, names="Resultado", values="Registros", hole=0.5, color="Resultado",
                  color_discrete_map={"Vendió": CARBON, "No vendió": ROJO})
-    fig.update_traces(textinfo="label+percent", textfont_size=15)
+    fig.update_traces(textinfo="label+percent", textfont_size=17)
     fig.update_layout(showlegend=False)
     sin = (df[columna] <= 0).mean() * 100
     return fig, "¿En cuántos meses hubo venta?", [
@@ -499,7 +510,7 @@ def g_gauge_venta(df, Datos, nombre, columna, medida, variable):
     fig = go.Figure(go.Indicator(mode="gauge+number", value=pct, number={"suffix": "%"},
                                  gauge={"axis": {"range": [0, 100]}, "bar": {"color": ROJO}, "bgcolor": "#EEF0F3",
                                         "borderwidth": 0}))
-    fig.update_traces(number_font=dict(color=TINTA, size=56))
+    fig.update_traces(number_font=dict(color=TINTA, size=64))
     return fig, "¿Qué tan seguido vende un vendedor?", [
         f"Un vendedor cierra al menos una venta en **{pct:.0f}%** de sus meses.",
         f"En **{100 - pct:.0f}%** de los meses no vende nada.",
@@ -515,7 +526,7 @@ def g_gauge_clima(df, Datos, nombre, columna, medida, variable):
                                         "steps": [{"range": [0, 3], "color": "#F8D7DC"},
                                                   {"range": [3, 4], "color": "#EEF0F3"},
                                                   {"range": [4, 5], "color": "#D5EBDD"}]}))
-    fig.update_traces(number_font=dict(color=TINTA, size=56))
+    fig.update_traces(number_font=dict(color=TINTA, size=64))
     return fig, "¿Cómo está el clima laboral?", [
         f"El promedio es **{prom:.2f} de 5**: el equipo califica bien su ambiente de trabajo.",
         f"La calificación más baja fue **{df[columna].min()}** y la más alta **{df[columna].max()}**."]
@@ -621,7 +632,7 @@ if View == "Hallazgos principales":
     Canales, _ = frecuencias(bases["Principales_Canales"], "Canal", "Ventas", "Categórica")
     figure1 = px.pie(Canales, names="Categoría", values="Ventas", hole=0.5,
                      color_discrete_sequence=[ROJO, CARBON, GRIS])
-    figure1.update_traces(textinfo="label+percent", textfont_size=15, sort=False)
+    figure1.update_traces(textinfo="label+percent", textfont_size=17, sort=False)
     figure1.update_layout(showlegend=False)
     seccion("1. ¿Por dónde llegan las ventas?", figure1, [
         f"**{Canales['Categoría'].iloc[0]}** es el canal que más vende: "
